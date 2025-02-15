@@ -314,9 +314,7 @@ version (USE_ODBC)
     class ODBCConnection : ddbc.core.Connection
     {
     private:
-        string url;
-        string[string] params;
-        string dbName;
+        string connStr;
 
         SQLHENV henv = SQL_NULL_HENV;
         SQLHDBC conn = SQL_NULL_HDBC;
@@ -378,16 +376,11 @@ version (USE_ODBC)
             return check!(Fn, file, line)(conn, cast(ushort) SQL_HANDLE_DBC, args);
         }
 
-        this(string url, string[string] params)
+        this(string connectionString)
         {
-            //writeln("ODBCConnection() creating connection");
+            info("Creating ODBC connection");
             mutex = new Mutex();
-            this.url = url;
-            this.params = params;
-
-            //writeln("parsing url " ~ url);
-            extractParamsFromURL(url, this.params);
-            //writeln(url);
+            this.connStr = connectionString;
 
             // Allocate environment handle
             checkenv!SQLAllocHandle(cast(ushort) SQL_HANDLE_ENV, SQL_NULL_HANDLE, &henv);
@@ -400,35 +393,10 @@ version (USE_ODBC)
 
             // Set login timeout to 5 seconds
             checkdbc!SQLSetConnectAttr(conn, SQL_LOGIN_TIMEOUT, cast(SQLPOINTER) 5, 0);
-
-            string[] connectionProps;
-
-            auto server = url[7 .. $].split('/').join('\\');
-            if (server.length)
-                    this.params["server"] = server;
-            void addToConnectionString(string key, string targetKey)
-            {
-                if (key in this.params)
-                {
-                    connectionProps ~= [targetKey ~ "=" ~this.params[key]];
-                }
-            }
-
-            if ("database" in this.params)
-                dbName = this.params["database"];
-
-            addToConnectionString("dsn", "DSN");
-            addToConnectionString("driver", "Driver");
-            addToConnectionString("server", "Server");
-            addToConnectionString("user", "Uid");
-            addToConnectionString("username", "Uid");
-            addToConnectionString("password", "Pwd");
-            addToConnectionString("database", "Database");
-            addToConnectionString("trusted_connection", "TrustServerCertificate");
-            string connectionString = connectionProps.join(';');
             
-            info(connectionString);
+            //info(connectionString);
 
+            info("Connecting to database");
             SQLCHAR[1024] outstr;
             SQLSMALLINT outstrlen;
             checkdbc!SQLDriverConnect(conn, // ConnectionHandle
@@ -443,8 +411,6 @@ version (USE_ODBC)
 
             closed = false;
             setAutoCommit(true);
-
-            //writeln("MySQLConnection() connection created");
         }
 
         override void close()
@@ -526,7 +492,7 @@ version (USE_ODBC)
 
         override string getCatalog()
         {
-            return dbName;
+            return connStr;
         }
 
         /// Sets the given catalog name in order to select a subspace of this Connection object's database in which to work.
@@ -1743,7 +1709,7 @@ version (USE_ODBC)
         override ddbc.core.Connection connect(string url, string[string] params)
         {
             //writeln("ODBCDriver.connect " ~ url);
-            return new ODBCConnection(url, params);
+            return new ODBCConnection(url);
         }
     }
 
